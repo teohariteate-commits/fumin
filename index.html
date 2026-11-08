@@ -69,7 +69,7 @@ header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; b
 .progress span { height: 6px; border-radius: 3px; background: var(--line); }
 .progress span.done { background: var(--accent); }
 
-h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; line-height: 1.4; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; line-height: 1.4; margin: 0; }
 h3 { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1.4; margin: 0; }
 .lead { color: var(--muted); margin: 0; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -933,25 +933,29 @@ window.addEventListener("error", (e) => {
 
 window.addEventListener("unhandledrejection", (e) => { try { window.dispatchEvent(new ErrorEvent("error", { message: String(e.reason) })); } catch (x) {} });
 
-// iPad の Safari がページを勝手に読み込み直したとき（赤い知らせが出ずに止まったとき）に、どの画面だったかを知らせる。
-// 覚えておくのは画面の番号と最後の操作だけで、入力した内容は残さない
+// iPad で赤い知らせが出ずに止まったとき（ボタンが反応しなくなったとき）に、どの画面の、どの操作だったかを次に開いたとき知らせる。
+// ボタンを押す前に記録し、画面が描き終わったら消す。止まると消されずに残る。
+// 覚えておくのはページの番号・見出し・操作だけで、入力した内容は残さない
 const TRACE_KEY = "fumin-trace";
-const trace = (what) => { try { sessionStorage.setItem(TRACE_KEY, `${step}|${what}|${new Date().toLocaleTimeString("ja-JP")}`); } catch (e) {} };
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
-  if (b) trace(b.id === "nextBtn" ? "次へを押した" : b.id === "backBtn" ? "もどるを押した" : "ボタンをタップした");
+  if (!b) return;
+  const what = b.id === "nextBtn" ? "次へを押した" : b.id === "backBtn" ? "もどるを押した" : `「${b.textContent.trim().slice(0, 20)}」をタップした`;
+  const h = document.querySelector("#screen h2");
+  try { localStorage.setItem(TRACE_KEY, `${step + 1}|${h ? h.textContent : ""}|${what}|${new Date().toLocaleTimeString("ja-JP")}`); } catch (x) {}
+  // 描き終わったら記録を消す（止まった場合はここまで来ない）
+  requestAnimationFrame(() => setTimeout(() => { try { localStorage.removeItem(TRACE_KEY); } catch (x) {} }, 300));
 }, true);
 (() => {
   let last = null;
-  try { last = sessionStorage.getItem(TRACE_KEY); sessionStorage.removeItem(TRACE_KEY); } catch (e) {}
+  try { last = localStorage.getItem(TRACE_KEY); localStorage.removeItem(TRACE_KEY); } catch (e) {}
   render();
   if (!last) return;
-  const [st, what, time] = last.split("|");
-  if (st === "0") return;
+  const [pg, head, what, time] = last.split("|");
   const el = document.createElement("p");
   el.setAttribute("role", "alert");
   el.style.cssText = "background:#fff6db;color:#6b4e00;border:1px solid #e6cf85;border-radius:10px;padding:10px 14px;margin:0;font-size:.95rem";
-  el.textContent = `前回は画面${st}で「${what}」あと（${time}）に、ページが読み込み直されました。止まったときは、この画面の写真を撮ってください。`;
+  el.textContent = `前回は ${pg}ページ目（${head}）で、${what}ところで止まったようです（${time}）。この知らせの写真を撮ってください。`;
   document.querySelector(".wrap").prepend(el);
 })();
 </script>
