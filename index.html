@@ -393,6 +393,9 @@ const SECTIONS = [
 // 眠りの様子（タイプの判定には使わない）
 const KIND = ["寝つくまでに30分以上かかる", "夜中に何度も目が覚める", "朝早く目が覚めて、そのあと眠れない", "眠った気がしない・朝すっきりしない", "夢をよく見る"];
 const SINCE = ["1か月以内", "1〜6か月", "半年〜数年", "もっと前から"];
+// 時刻は iPad の時刻ピッカーを使わず、ボタンで選ぶ
+const BED = ["22時より前", "22時台", "23時台", "0時台", "1時以降"];
+const WAKE = ["5時より前", "5時台", "6時台", "7時台", "8時以降"];
 const HOURS = ["4時間未満", "4〜5時間", "5〜6時間", "6〜7時間", "7時間以上"];
 // 習慣。tip は結果の「眠りの習慣」に足す
 const HABITS = [
@@ -565,15 +568,13 @@ function sleepHTML() {
       </div>
     </div>
     <div class="panel">
-      <div class="row2">
-        <div class="field">
-          <label for="fBed">布団に入る時刻<span class="opt">だいたいで</span></label>
-          <input id="fBed" type="time" value="${esc(state.bed)}">
-        </div>
-        <div class="field">
-          <label for="fWake">起きる時刻<span class="opt">だいたいで</span></label>
-          <input id="fWake" type="time" value="${esc(state.wake)}">
-        </div>
+      <div class="field">
+        <span class="label" id="bedLbl">布団に入る時刻<span class="opt">だいたいで</span></span>
+        <div class="chips" role="group" aria-labelledby="bedLbl">${one("bed", BED)}</div>
+      </div>
+      <div class="field">
+        <span class="label" id="wakeLbl">起きる時刻<span class="opt">だいたいで</span></span>
+        <div class="chips" role="group" aria-labelledby="wakeLbl">${one("wake", WAKE)}</div>
       </div>
       <div class="field">
         <span class="label" id="hoursLbl">実際に眠れている時間</span>
@@ -869,17 +870,20 @@ function copyText(text, okId, onFail) {
 
 function bind() {
   const on = (id, key) => { const el = $(id); if (el) el.oninput = () => (state[key] = el.value); };
-  on("fName", "name"); on("fDate", "date"); on("fAge", "age"); on("fBed", "bed"); on("fWake", "wake"); on("fPill", "pill");
+  on("fName", "name"); on("fDate", "date"); on("fAge", "age"); on("fPill", "pill");
   on("fPolicy", "policy"); on("fPoints", "points"); on("fHow", "how"); on("fTermNote", "termNote"); on("fComment", "comment");
+  // ボタンを押したときは、画面全体を作り直さず、押したボタンの見た目だけを変える（iPad の負担を減らすため）
   document.querySelectorAll("[data-one]").forEach((b) => (b.onclick = () => {
     const f = b.dataset.one, v = b.dataset.v;
     state[f] = state[f] === v && step < STAFF_STEP ? "" : v;
-    render(true);
+    b.parentNode.querySelectorAll("[data-one]").forEach((x) => x.setAttribute("aria-pressed", state[f] === x.dataset.v));
   }));
   document.querySelectorAll("[data-many]").forEach((b) => (b.onclick = () => {
     const set = state[b.dataset.many], v = b.dataset.v;
     set.has(v) ? set.delete(v) : set.add(v);
-    render(true);
+    b.setAttribute("aria-pressed", set.has(v));
+    const pill = $("fPill");
+    if (pill) pill.closest(".field").hidden = !takesPill();
   }));
   document.querySelectorAll(".q").forEach((b) => (b.onclick = () => {
     const id = b.dataset.q;
@@ -927,7 +931,29 @@ window.addEventListener("error", (e) => {
   el.textContent = `うまく動かない箇所がありました。この画面の写真を撮ってください。（画面${step}：${e.message}）`;
 });
 
-render();
+window.addEventListener("unhandledrejection", (e) => { try { window.dispatchEvent(new ErrorEvent("error", { message: String(e.reason) })); } catch (x) {} });
+
+// iPad の Safari がページを勝手に読み込み直したとき（赤い知らせが出ずに止まったとき）に、どの画面だったかを知らせる。
+// 覚えておくのは画面の番号と最後の操作だけで、入力した内容は残さない
+const TRACE_KEY = "fumin-trace";
+const trace = (what) => { try { sessionStorage.setItem(TRACE_KEY, `${step}|${what}|${new Date().toLocaleTimeString("ja-JP")}`); } catch (e) {} };
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b) trace(b.id === "nextBtn" ? "次へを押した" : b.id === "backBtn" ? "もどるを押した" : "ボタンをタップした");
+}, true);
+(() => {
+  let last = null;
+  try { last = sessionStorage.getItem(TRACE_KEY); sessionStorage.removeItem(TRACE_KEY); } catch (e) {}
+  render();
+  if (!last) return;
+  const [st, what, time] = last.split("|");
+  if (st === "0") return;
+  const el = document.createElement("p");
+  el.setAttribute("role", "alert");
+  el.style.cssText = "background:#fff6db;color:#6b4e00;border:1px solid #e6cf85;border-radius:10px;padding:10px 14px;margin:0;font-size:.95rem";
+  el.textContent = `前回は画面${st}で「${what}」あと（${time}）に、ページが読み込み直されました。止まったときは、この画面の写真を撮ってください。`;
+  document.querySelector(".wrap").prepend(el);
+})();
 </script>
 </body>
 </html>
